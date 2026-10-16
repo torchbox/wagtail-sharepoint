@@ -1,0 +1,190 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'stable/**'
+
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+env:
+  FORCE_COLOR: '1' # Make tools pretty.
+  TOX_TESTENV_PASSENV: FORCE_COLOR
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PIP_NO_PYTHON_VERSION_WARNING: '1'
+  PYTHON_LATEST: '3.14'
+
+jobs:
+  test-sqlite:
+    name: Test with sqlite
+    runs-on: ubuntu-26.04-arm
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+        django: ["5.2"]
+        wagtail: ["7.4"]
+        db: ["sqlite"]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            files.pythonhosted.org:443
+            objects.githubusercontent.com:443
+            github.com:443
+            pypi.org:443
+            api.github.com:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -Im pip install --upgrade pip flit tox tox-gh-actions
+
+      - name: 🏗️ Build wheel
+        run: python -Im flit build --format wheel
+
+      - name: Test
+        env:
+          TOXENV: py${{ matrix.python-version }}-django${{ matrix.django }}-wagtail${{ matrix.wagtail }}
+        run: tox --installpkg ./dist/*.whl
+
+      - name: ⬆️ Upload coverage data
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-data-${{ matrix.python-version }}-sqlite
+          path: .coverage.*
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 1
+
+  test-postgres:
+    name: Test with Postgres
+    runs-on: ubuntu-26.04-arm
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14", "3.15"]
+        db: ["postgres"]
+
+    services:
+      postgres:
+        image: postgres@sha256:c961aa287d8698297cb26cdfadfbe9fd2cbaf77e53cfffe9636e8d8a1e4d842c  # v15.19-arm
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        # Use a very short interval to avoid getting out of sync with GHA's
+        # orchestration. This healthcheck controls how Docker determines the
+        # container's status, but the job orchestrator polls Docker with
+        # exponential backoff. When the healthcheck lands just after the
+        # orchestrator polls, you can get unreasonably long waits. This is a
+        # little dumb, but in practice cuts wait times by more than half.
+        # For more, see: https://github.com/actions/runner/issues/496
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            files.pythonhosted.org:443
+            objects.githubusercontent.com:443
+            github.com:443
+            pypi.org:443
+            api.github.com:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -Im pip install --upgrade pip flit tox tox-gh-actions
+
+      - name: 🏗️ Build wheel
+        run: python -Im flit build --format wheel
+
+      - name: Test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/wagtail_sharepoint
+        run: tox --installpkg ./dist/*.whl
+
+      - name: ⬆️ Upload coverage data
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-data-${{ matrix.python-version }}
+          path: .coverage.*
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 1
+
+  coverage:
+    name: Combine & check coverage.
+    runs-on: ubuntu-26.04-arm
+    needs:
+      - test-sqlite
+      - test-postgres
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            files.pythonhosted.org:443
+            objects.githubusercontent.com:443
+            github.com:443
+            pypi.org:443
+            api.github.com:443
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          # Use latest Python, so it understands all syntax.
+          python-version: ${{env.PYTHON_LATEST}}
+
+      - run: python -Im pip install --upgrade coverage
+
+      - name: ⬇️ Download coverage data
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          pattern: coverage-data-*
+          merge-multiple: true
+
+      - name: ＋ Combine coverage
+        run: |
+          python -Im coverage combine
+          python -Im coverage html --skip-covered --skip-empty
+          python -Im coverage report
+          echo "## Coverage summary" >> $GITHUB_STEP_SUMMARY
+          python -Im coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+      - name: 📈 Upload HTML report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: html-report
+          path: htmlcov

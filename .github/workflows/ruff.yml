@@ -1,0 +1,46 @@
+name: Ruff
+
+on:
+  push:
+    branches:
+      - main
+      - 'stable/**'
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      contents: read # to fetch code (actions/checkout)
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            files.pythonhosted.org:443
+            objects.githubusercontent.com:443
+            github.com:443
+            pypi.org:443
+            api.github.com:443
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Keep in sync with .pre-commit-config.yaml
+      - run: python -Im pip install --user ruff==0.16.10
+
+      - name: Run ruff
+        working-directory: ./src
+        run: ruff check --output-format=github wagtail_sharepoint
