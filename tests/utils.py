@@ -143,7 +143,7 @@ def mock_drive_item_response(data, drive_id=DRIVE_ID, **kwargs):
 
 def mock_page_response(data, site_id=TEST_SITE_ID, **kwargs):
     return responses.get(
-        f"{API_ROOT}/sites/{site_id}/pages/{data['id']}/microsoft.api_client.sitePage",
+        f"{API_ROOT}/sites/{site_id}/pages/{data['id']}/microsoft.graph.sitePage",
         json=data,
         **kwargs,
     )

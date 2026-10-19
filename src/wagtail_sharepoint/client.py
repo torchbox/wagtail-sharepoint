@@ -219,7 +219,7 @@ class MsGraphApiClient:
 
         item = self.request(
             "GET",
-            f"/sites/{site_id}/pages/{item_id}/microsoft.api_client.sitePage",
+            f"/sites/{site_id}/pages/{item_id}/microsoft.graph.sitePage",
             params={"$select": PAGE_FIELDS},
         )
         cache.set(cache_key, item, SHORT_CACHE_TTL)
