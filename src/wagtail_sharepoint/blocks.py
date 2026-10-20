@@ -32,7 +32,8 @@ SharepointDocumentChooserBlockBase = (
 class SharepointDocumentChooserBlock(
     VirtualModelMixin, SharepointDocumentChooserBlockBase
 ):
-    pass
+    class Meta:
+        template = "wagtail_sharepoint/sharepoint_document.html"
 
 
 SharepointPageChooserBlockBase = sharepoint_page_chooser_viewset.get_block_class(
@@ -41,4 +42,5 @@ SharepointPageChooserBlockBase = sharepoint_page_chooser_viewset.get_block_class
 
 
 class SharepointPageChooserBlock(VirtualModelMixin, SharepointPageChooserBlockBase):
-    pass
+    class Meta:
+        template = "wagtail_sharepoint/sharepoint_page.html"
