@@ -39,7 +39,6 @@ class BlockTestCase(WagtailTestUtils, TestCase):
         cls.page_pk = f"{TEST_SITE_ID}::{cls.page_data['id']}"
 
     def setUp(self):
-        super().setUp()
         mock_token_response()
         mock_sites_response()
         self.document_block = SharepointDocumentChooserBlock()
